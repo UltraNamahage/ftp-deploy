@@ -132,6 +132,43 @@ function deleteDir(ftp, dir) {
     return ftp.list('-al ' + dir).then(internalDelete, () => ftp.list(dir).then(internalDelete));
 }
 
+function backupRemote(ftp, log, remote, local) {
+
+    const pipeAsync = (from, to) => new Promise((resolve, reject) => {
+        from.once('end', resolve);
+        from.once('error', reject);
+        from.pipe(to);
+    });
+
+    const mkdirAsync = fs.existsSync(local)
+        ? Promise.resolve()
+        : fs.promises.mkdir(local);
+    log({ remote, local, type: 'dir' })
+
+    const internalBackup = lst => Promise.map(lst, f => {
+        const from = path.posix.join(remote, f.name);
+        const to = path.join(local, f.name);
+
+        if(f.type == "d" && f.name != ".." && f.name != "."){
+            return backupRemote(ftp, log, from, to);
+        }
+
+        if(f.type!= "d"){
+            log({ from, to, type: "file" })
+
+            return ftp.get(from)
+                .then(s => pipeAsync(s, fs.createWriteStream(to)))
+                .error(err => {
+                    from.end()
+                    throw err
+                })
+        }
+
+    }, { concurrency: 1 })
+
+    return mkdirAsync.then(() => ftp.list('-al ' + remote).then(internalBackup, () => ftp.list(remote).then(internalBackup)));
+}
+
 mkDirExists = (ftp, dir) => {
     // Make the directory using recursive expand
     return ftp.mkdir(dir, true).catch(err => {
@@ -152,5 +189,6 @@ module.exports = {
     canIncludePath: canIncludePath,
     countFiles: countFiles,
     mkDirExists: mkDirExists,
-    deleteDir: deleteDir
+    deleteDir: deleteDir,
+    backupRemote: backupRemote
 };

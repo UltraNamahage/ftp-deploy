@@ -165,11 +165,29 @@ const FtpDeployer = function () {
         return Promise.resolve(config);
     };
 
+    // Remote Directory BackUp
+    // Returns config
+    this.backupRemote = (config) => {
+        if (config.backupDir) {
+            const logging = l => {
+                console.log(l.type + ": " + l.from + " --> " + l.to)
+            }
+            console.log("=== Backup start ===")
+
+            return lib
+                .backupRemote(this.ftp, logging, config.remoteRoot, config.backupDir)
+                .then(() => console.log("=== Backup Finish ==="))
+                .then(() => config)
+        }
+        return Promise.resolve(config);
+    };
+
     this.deploy = function (config, cb) {
         return lib
             .checkIncludes(config)
             .then(lib.getPassword)
             .then(this.connect)
+            .then(this.backupRemote)
             .then(this.deleteRemote)
             .then(this.checkLocalAndUpload)
             .then((res) => {
